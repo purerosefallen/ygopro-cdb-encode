@@ -144,6 +144,18 @@ export type CdbFindOperator<T = unknown> = {
 
 export type CdbFindValue<T> = T | CdbFindOperator<T>;
 
+export interface CdbFindVirtualFields {
+  code: number;
+  rawLevel: number;
+  rawDefense: number;
+  defense: number;
+  linkMarker: number | null;
+  lscale: number;
+  rscale: number;
+}
+
 export type CdbFindFilter = {
-  [K in keyof CdbSqljsRow]?: CdbFindValue<CdbSqljsRow[K]>;
+  [K in keyof (CdbSqljsRow & CdbFindVirtualFields)]?: CdbFindValue<
+    (CdbSqljsRow & CdbFindVirtualFields)[K]
+  >;
 };

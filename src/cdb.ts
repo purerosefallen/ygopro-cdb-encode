@@ -53,7 +53,7 @@ export class YGOProCdb {
     return this.db;
   }
 
-  fromDb(db: Database | Uint8Array) {
+  from(db: Database | Uint8Array) {
     if (this.db) {
       this.finalize();
     }

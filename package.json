@@ -1,6 +1,6 @@
 {
-  "name": "myproject",
-  "description": "myproject-desc",
+  "name": "ygopro-cdb-encode",
+  "description": "YGOPro CDB encoder/decoder and query helpers for Node.js/TypeScript.",
   "version": "1.0.0",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
@@ -24,15 +24,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://code.moenext.com/nanahira/myproject.git"
+    "url": "https://github.com/purerosefallen/ygopro-cdb-encode.git"
   },
   "author": "Nanahira <nanahira@momobako.com>",
   "license": "MIT",
   "keywords": [],
   "bugs": {
-    "url": "https://code.moenext.com/nanahira/myproject/issues"
+    "url": "https://github.com/purerosefallen/ygopro-cdb-encode/issues"
   },
-  "homepage": "https://code.moenext.com/nanahira/myproject",
+  "homepage": "https://github.com/purerosefallen/ygopro-cdb-encode",
   "jest": {
     "moduleFileExtensions": [
       "js",

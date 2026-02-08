@@ -2,6 +2,7 @@ import fs from 'fs';
 import initSqlJs from 'sql.js';
 import { YGOProCdb } from '../src/cdb';
 import { CardDataEntry } from '../src/card-data-entry';
+import { OcgcoreCommonConstants } from 'ygopro-msg-encode';
 import {
   And,
   HasAllBits,
@@ -18,11 +19,18 @@ describe('YGOProCdb find APIs', () => {
   let sampleId: number;
   let sampleAtk: number;
   let sampleType: number;
+  let sampleRawLevel: number;
+  let sampleRawDefense: number;
+  let linkId: number;
+  let linkRawDefense: number;
+  let nonLinkId: number;
+  let nonLinkRawDefense: number;
 
   beforeAll(async () => {
     const SQL = await initSqlJs();
     const data = new Uint8Array(fs.readFileSync('tests/cards.cdb'));
-    cdb = new YGOProCdb(SQL).fromDb(data);
+    cdb = new YGOProCdb(SQL).from(data);
+    const rawDb = new SQL.Database(data);
 
     const sample = cdb.findOne('texts.name = :name', { name: '青眼白龙' });
     if (!sample) {
@@ -31,6 +39,30 @@ describe('YGOProCdb find APIs', () => {
     sampleId = sample.code;
     sampleAtk = sample.attack;
     sampleType = sample.type;
+    {
+      const res = rawDb.exec(
+        `SELECT level, def FROM datas WHERE id = ${sampleId} LIMIT 1`,
+      );
+      sampleRawLevel = Number(res[0].values[0][0]);
+      sampleRawDefense = Number(res[0].values[0][1]);
+    }
+
+    const typeLink = OcgcoreCommonConstants.TYPE_LINK >>> 0;
+    {
+      const res = rawDb.exec(
+        `SELECT id, def FROM datas WHERE (type & ${typeLink}) != 0 LIMIT 1`,
+      );
+      linkId = Number(res[0].values[0][0]);
+      linkRawDefense = Number(res[0].values[0][1]);
+    }
+    {
+      const res = rawDb.exec(
+        `SELECT id, def FROM datas WHERE (type & ${typeLink}) = 0 LIMIT 1`,
+      );
+      nonLinkId = Number(res[0].values[0][0]);
+      nonLinkRawDefense = Number(res[0].values[0][1]);
+    }
+    rawDb.close();
   });
 
   test('find() returns cards', () => {
@@ -54,6 +86,18 @@ describe('YGOProCdb find APIs', () => {
     const cards = cdb.find({ id: sampleId });
     expect(cards.length).toBe(1);
     expect(cards[0].code).toBe(sampleId);
+  });
+
+  test('virtual fields: code/rawLevel/rawDefense', () => {
+    const byCode = cdb.find({ code: sampleId });
+    expect(byCode.length).toBe(1);
+    expect(byCode[0].code).toBe(sampleId);
+
+    const byRawLevel = cdb.findOne({ rawLevel: sampleRawLevel });
+    expect(byRawLevel).toBeDefined();
+
+    const byRawDefense = cdb.findOne({ rawDefense: sampleRawDefense });
+    expect(byRawDefense).toBeDefined();
   });
 
   test('findOne adds limit 1 if missing', () => {
@@ -111,6 +155,24 @@ describe('YGOProCdb find APIs', () => {
     const hasAllBits = cdb.find({ id: sampleId, type: HasAllBits(sampleType) });
     expect(hasAllBits.length).toBe(1);
   });
+
+  test('virtual fields: defense/linkMarker for link and non-link', () => {
+    const linkDefenseNull = cdb.find({ id: linkId, defense: null });
+    expect(linkDefenseNull.length).toBe(1);
+    const linkMarkerMatch = cdb.find({
+      id: linkId,
+      linkMarker: linkRawDefense,
+    });
+    expect(linkMarkerMatch.length).toBe(1);
+
+    const nonLinkDefenseMatch = cdb.find({
+      id: nonLinkId,
+      defense: nonLinkRawDefense,
+    });
+    expect(nonLinkDefenseMatch.length).toBe(1);
+    const nonLinkMarkerNull = cdb.find({ id: nonLinkId, linkMarker: null });
+    expect(nonLinkMarkerNull.length).toBe(1);
+  });
 });
 
 describe('YGOProCdb addCard and export', () => {
@@ -156,7 +218,7 @@ describe('YGOProCdb addCard and export', () => {
 
     db.addCard(entry);
     const exported = db.export();
-    const reopened = new YGOProCdb(SQL).fromDb(exported);
+    const reopened = new YGOProCdb(SQL).from(exported);
     const found = reopened.findById(654321);
     expect(found).toBeDefined();
     expect(found?.name).toBe('导出测试卡');

@@ -1,6 +1,8 @@
+import { OcgcoreCommonConstants } from 'ygopro-msg-encode';
 import {
   CdbFindFilter,
   CdbFindOperator,
+  CdbFindVirtualFields,
   CdbSqljsRow,
   CdbSqljsRowData,
   CdbSqljsRowText,
@@ -68,6 +70,35 @@ const allPlainValuesEqual = (values: unknown[]) => {
 
 const isTextKey = (key: keyof CdbSqljsRow) =>
   TEXT_FIELDS.includes(key as keyof CdbSqljsRowText);
+
+const TYPE_LINK = OcgcoreCommonConstants.TYPE_LINK >>> 0;
+
+const getColumnExpr = (
+  key: keyof (CdbSqljsRow & CdbFindVirtualFields),
+): string => {
+  switch (key) {
+    case 'code':
+      return 'datas.id';
+    case 'level':
+      return '(datas.level & 255)';
+    case 'rawLevel':
+      return 'datas.level';
+    case 'lscale':
+      return '((datas.level >> 24) & 255)';
+    case 'rscale':
+      return '((datas.level >> 16) & 255)';
+    case 'linkMarker':
+      return `CASE WHEN (datas.type & ${TYPE_LINK}) != 0 THEN datas.def ELSE NULL END`;
+    case 'rawDefense':
+      return 'datas.def';
+    case 'defense':
+      return `CASE WHEN (datas.type & ${TYPE_LINK}) != 0 THEN NULL ELSE datas.def END`;
+    default:
+      return isTextKey(key as keyof CdbSqljsRow)
+        ? `texts.${String(key)}`
+        : `datas.${String(key)}`;
+  }
+};
 
 const addParam = (ctx: PredicateBuildContext, value: any) => {
   const key = `p${ctx.nextParamId++}`;
@@ -212,8 +243,8 @@ export function buildCdbFilterStmt(filter: CdbFindFilter) {
   };
   for (const [rawKey, value] of Object.entries(filter)) {
     if (value === undefined) continue;
-    const key = rawKey as keyof CdbSqljsRow;
-    const column = isTextKey(key) ? `texts.${rawKey}` : `datas.${rawKey}`;
+    const key = rawKey as keyof (CdbSqljsRow & CdbFindVirtualFields);
+    const column = getColumnExpr(key);
     clauses.push(buildPredicate(column, value, ctx));
   }
   return { stmt: clauses.join(' AND '), params: ctx.params };
