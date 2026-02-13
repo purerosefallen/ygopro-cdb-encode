@@ -69,6 +69,6 @@
     "@types/sql.js": "^1.4.9",
     "nfkit": "^1.0.21",
     "sql.js": "^1.13.0",
-    "ygopro-msg-encode": "^1.1.7"
+    "ygopro-msg-encode": "^1.1.10"
   }
 }
