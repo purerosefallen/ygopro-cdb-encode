@@ -48,6 +48,10 @@ type PredicateBuildContext = {
   nextParamId: number;
 };
 
+type BuildCdbFilterOptions = {
+  noTexts?: boolean;
+};
+
 const isFindOperator = (value: unknown): value is CdbFindOperator => {
   return (
     !!value &&
@@ -75,6 +79,7 @@ const TYPE_LINK = OcgcoreCommonConstants.TYPE_LINK >>> 0;
 
 const getColumnExpr = (
   key: keyof (CdbSqljsRow & CdbFindVirtualFields),
+  options?: BuildCdbFilterOptions,
 ): string => {
   switch (key) {
     case 'code':
@@ -94,6 +99,11 @@ const getColumnExpr = (
     case 'defense':
       return `CASE WHEN (datas.type & ${TYPE_LINK}) != 0 THEN NULL ELSE datas.def END`;
     default:
+      if (options?.noTexts && isTextKey(key as keyof CdbSqljsRow)) {
+        throw new Error(
+          `Text field "${String(key)}" is not available in noTexts mode`,
+        );
+      }
       return isTextKey(key as keyof CdbSqljsRow)
         ? `texts.${String(key)}`
         : `datas.${String(key)}`;
@@ -235,7 +245,10 @@ const buildPredicate = (
   return `${column} = ${param}`;
 };
 
-export function buildCdbFilterStmt(filter: CdbFindFilter) {
+export function buildCdbFilterStmt(
+  filter: CdbFindFilter,
+  options?: BuildCdbFilterOptions,
+) {
   const clauses: string[] = [];
   const ctx: PredicateBuildContext = {
     params: {},
@@ -244,7 +257,7 @@ export function buildCdbFilterStmt(filter: CdbFindFilter) {
   for (const [rawKey, value] of Object.entries(filter)) {
     if (value === undefined) continue;
     const key = rawKey as keyof (CdbSqljsRow & CdbFindVirtualFields);
-    const column = getColumnExpr(key);
+    const column = getColumnExpr(key, options);
     clauses.push(buildPredicate(column, value, ctx));
   }
   return { stmt: clauses.join(' AND '), params: ctx.params };

@@ -173,6 +173,68 @@ describe('YGOProCdb find APIs', () => {
     const nonLinkMarkerNull = cdb.find({ id: nonLinkId, linkMarker: null });
     expect(nonLinkMarkerNull.length).toBe(1);
   });
+
+  test('noTexts mode finds from datas without joining texts', async () => {
+    const SQL = await initSqlJs();
+    const data = new Uint8Array(fs.readFileSync('tests/cards.cdb'));
+    const rawDb = new SQL.Database(data);
+    rawDb.exec('DROP TABLE texts');
+
+    const local = new YGOProCdb(rawDb).noTexts();
+    const cards = local.find({ id: sampleId });
+    expect(cards.length).toBe(1);
+    expect(cards[0].code).toBe(sampleId);
+    expect(cards[0].name).toBe('');
+    expect(cards[0].desc).toBe('');
+    local.finalize();
+  });
+
+  test('noTexts mode rejects text predicates', () => {
+    cdb.noTexts();
+
+    expect(() =>
+      cdb.find('texts.name = :name', { name: '黑魔术师' }),
+    ).toThrow(/noTexts mode/i);
+
+    expect(() => cdb.find({ name: '黑魔术师' })).toThrow(/noTexts mode/i);
+    expect(() => cdb.findOne({ name: '黑魔术师' })).toThrow(/noTexts mode/i);
+
+    cdb.noTexts(false);
+  });
+
+  test('constructor inherits noTexts mode from another instance', async () => {
+    const SQL = await initSqlJs();
+    const data = new Uint8Array(fs.readFileSync('tests/cards.cdb'));
+    const base = new YGOProCdb(SQL).from(data).noTexts();
+    const inherited = new YGOProCdb(base);
+
+    expect(() =>
+      inherited.find('texts.name = :name', { name: '黑魔术师' }),
+    ).toThrow(/noTexts mode/i);
+
+    const cards = inherited.find({ id: sampleId });
+    expect(cards.length).toBe(1);
+    expect(cards[0].code).toBe(sampleId);
+  });
+
+  test('noTexts toggle drops and recreates texts table', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+
+    db.noTexts();
+    let exists = db.database.exec(
+      `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'texts'`,
+    );
+    expect(exists.length).toBe(0);
+
+    db.noTexts(false);
+    exists = db.database.exec(
+      `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'texts'`,
+    );
+    expect(exists.length).toBe(1);
+
+    db.finalize();
+  });
 });
 
 describe('YGOProCdb addCard and export', () => {

@@ -10,14 +10,19 @@ import {
 } from './types';
 import { buildCdbFilterStmt, normalizeCdbParams } from './utility/cdb-filter';
 
-const SELECT_STMT =
+const SELECT_STMT_WITH_TEXTS =
   'SELECT datas.id, datas.ot, datas.alias, datas.setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category,' +
   ' texts.name, texts.desc, texts.str1, texts.str2, texts.str3, texts.str4, texts.str5, texts.str6, texts.str7, texts.str8,' +
   ' texts.str9, texts.str10, texts.str11, texts.str12, texts.str13, texts.str14, texts.str15, texts.str16 FROM datas INNER JOIN texts ON datas.id = texts.id';
+const SELECT_STMT_NO_TEXTS =
+  'SELECT datas.id, datas.ot, datas.alias, datas.setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category FROM datas';
 
 const CREATE_TABLE_STMT =
   'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
   'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);';
+const CREATE_TEXTS_TABLE_STMT =
+  'CREATE TABLE IF NOT EXISTS texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);';
+const DROP_TEXTS_TABLE_STMT = 'DROP TABLE IF EXISTS texts';
 
 const INSERT_DATAS_STMT =
   'INSERT OR REPLACE INTO datas(id,ot,alias,setcode,type,atk,def,level,race,attribute,category) VALUES (?,?,?,?,?,?,?,?,?,?,?)';
@@ -32,6 +37,7 @@ export class YGOProCdb {
     if (sqljsStaticOrDb instanceof YGOProCdb) {
       this.SQL = sqljsStaticOrDb.SQL;
       this.db = sqljsStaticOrDb.db;
+      this._noTexts = sqljsStaticOrDb._noTexts;
     } else if (isSqlJsStatic(sqljsStaticOrDb)) {
       this.SQL = sqljsStaticOrDb;
       this.db = new this.SQL.Database();
@@ -70,10 +76,23 @@ export class YGOProCdb {
     return this;
   }
 
+  private _noTexts = false;
+  noTexts(value = true) {
+    this._noTexts = value;
+    if (value) {
+      this.database.exec(DROP_TEXTS_TABLE_STMT);
+    } else {
+      this.database.exec(CREATE_TEXTS_TABLE_STMT);
+    }
+    return this;
+  }
+
   addCard(card: MayBeArray<CardDataEntry>) {
     const cards = makeArray(card);
     const stmtDatas = this.database.prepare(INSERT_DATAS_STMT);
-    const stmtTexts = this.database.prepare(INSERT_TEXTS_STMT);
+    const stmtTexts = this._noTexts
+      ? undefined
+      : this.database.prepare(INSERT_TEXTS_STMT);
     const toSqlValueSetcode = (value: number | bigint) => {
       if (typeof value !== 'bigint') {
         return value;
@@ -101,31 +120,33 @@ export class YGOProCdb {
           datas.attribute,
           datas.category,
         ]);
-        stmtTexts.run([
-          texts.id,
-          texts.name,
-          texts.desc,
-          texts.str1,
-          texts.str2,
-          texts.str3,
-          texts.str4,
-          texts.str5,
-          texts.str6,
-          texts.str7,
-          texts.str8,
-          texts.str9,
-          texts.str10,
-          texts.str11,
-          texts.str12,
-          texts.str13,
-          texts.str14,
-          texts.str15,
-          texts.str16,
-        ]);
+        if (stmtTexts) {
+          stmtTexts.run([
+            texts.id,
+            texts.name,
+            texts.desc,
+            texts.str1,
+            texts.str2,
+            texts.str3,
+            texts.str4,
+            texts.str5,
+            texts.str6,
+            texts.str7,
+            texts.str8,
+            texts.str9,
+            texts.str10,
+            texts.str11,
+            texts.str12,
+            texts.str13,
+            texts.str14,
+            texts.str15,
+            texts.str16,
+          ]);
+        }
       }
     } finally {
       stmtDatas.free();
-      stmtTexts.free();
+      stmtTexts?.free();
     }
     return this;
   }
@@ -148,15 +169,20 @@ export class YGOProCdb {
     } else if (typeof args[0] === 'string') {
       stmt = args[0];
       params = args[1] ?? {};
+      if (this._noTexts && /\btexts\./i.test(stmt)) {
+        throw new Error('texts table is not available in noTexts mode');
+      }
     } else {
       const filter = args[0] as CdbFindFilter;
-      const built = buildCdbFilterStmt(filter);
+      const built = buildCdbFilterStmt(filter, { noTexts: this._noTexts });
       stmt = built.stmt;
       params = built.params;
     }
 
     const where = stmt ? ` WHERE ${stmt}` : '';
-    const sql = `${SELECT_STMT}${where}`;
+    const sql = `${
+      this._noTexts ? SELECT_STMT_NO_TEXTS : SELECT_STMT_WITH_TEXTS
+    }${where}`;
     const query = this.database.prepare(sql);
     const results: CardDataEntry[] = [];
     try {
@@ -196,7 +222,7 @@ export class YGOProCdb {
       )(stmt, params as Record<string, any>)[0];
     }
     const filter = args[0] as CdbFindFilter;
-    const built = buildCdbFilterStmt(filter);
+    const built = buildCdbFilterStmt(filter, { noTexts: this._noTexts });
     const stmt = built.stmt ? `${built.stmt} LIMIT 1` : '1=1 LIMIT 1';
     return this.find(stmt, built.params)[0];
   }
