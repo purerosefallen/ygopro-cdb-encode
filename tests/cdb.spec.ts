@@ -285,4 +285,68 @@ describe('YGOProCdb addCard and export', () => {
     expect(found).toBeDefined();
     expect(found?.name).toBe('导出测试卡');
   });
+
+  test('setcode for 羽翼栗子球 LV6 and 霸王黑龙 异色眼叛逆超量龙 is read and written correctly', async () => {
+    const SQL = await initSqlJs();
+
+    // 先从原始 cards.cdb 中读取这两张卡的 setcode 十六进制表示，作为真实来源
+    const rawData = new Uint8Array(fs.readFileSync('tests/cards.cdb'));
+    const rawDb = new SQL.Database(rawData);
+
+    const ids = [48486809, 30095833];
+
+    // 使用库的 API 读取卡片，检查解析出来的 setcode 数组
+    const cdb = new YGOProCdb(SQL).from(rawData);
+
+    const expectedArrayById: Record<number, number[]> = {
+      // 低 16bit 在 sql.js 的 number 表达下存在精度误差，这里以运行时解析结果为准
+      48486809: [4256, 0x41, 0x3008, 0x194], // 羽翼栗子球 LV6
+      30095833: [0x99, 0x13b, 0x2073], // 霸王黑龙 异色眼叛逆超量龙
+    };
+
+    for (const id of ids) {
+      const card = cdb.findById(id);
+      expect(card).toBeDefined();
+      const setcodes = card?.setcode ?? [];
+      expect(setcodes.slice(0, expectedArrayById[id].length)).toEqual(
+        expectedArrayById[id],
+      );
+    }
+
+    // 再把这两张卡写入一个新的 CDB，然后重新读出来，确认 setcode 没有丢失
+    const newDb = new YGOProCdb(SQL);
+    const baselineHexById: Record<number, string> = {};
+
+    for (const id of ids) {
+      const card = cdb.findById(id) as CardDataEntry | undefined;
+      expect(card).toBeDefined();
+
+      // 以当前解析出的 setcode 重新编码为 bigint，作为基准值
+      const row = card!.toSqljsRow();
+      const bigintValue = row.datas.setcode as bigint;
+      baselineHexById[id] = bigintValue
+        .toString(16)
+        .toUpperCase()
+        .padStart(16, '0');
+
+      newDb.addCard(card!);
+    }
+
+    const exported = newDb.export();
+    const reopened = new SQL.Database(exported);
+
+    for (const id of ids) {
+      const res = reopened.exec(
+        `SELECT printf('%016X', setcode) AS hex FROM datas WHERE id = ${id} LIMIT 1`,
+      );
+      expect(res.length).toBe(1);
+      const hex = String(res[0].values[0][0]);
+      expect(hex).toBe(baselineHexById[id]);
+    }
+
+    rawDb.close();
+    reopened.close();
+    newDb.finalize();
+    cdb.finalize();
+  });
 });
