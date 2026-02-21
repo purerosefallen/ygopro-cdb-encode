@@ -36,3 +36,6 @@ lerna-debug.log*
 /data
 /output
 /config.yaml
+
+.DS_Store
+._*

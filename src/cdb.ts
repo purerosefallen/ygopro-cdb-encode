@@ -23,6 +23,9 @@ const CREATE_TABLE_STMT =
 const CREATE_TEXTS_TABLE_STMT =
   'CREATE TABLE IF NOT EXISTS texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);';
 const DROP_TEXTS_TABLE_STMT = 'DROP TABLE IF EXISTS texts';
+const INSERT_EMPTY_TEXTS_FROM_DATAS_STMT =
+  "INSERT OR IGNORE INTO texts(id,name,desc,str1,str2,str3,str4,str5,str6,str7,str8,str9,str10,str11,str12,str13,str14,str15,str16) " +
+  "SELECT datas.id,'' AS name,'' AS desc,'' AS str1,'' AS str2,'' AS str3,'' AS str4,'' AS str5,'' AS str6,'' AS str7,'' AS str8,'' AS str9,'' AS str10,'' AS str11,'' AS str12,'' AS str13,'' AS str14,'' AS str15,'' AS str16 FROM datas";
 
 const INSERT_DATAS_STMT =
   'INSERT OR REPLACE INTO datas(id,ot,alias,setcode,type,atk,def,level,race,attribute,category) VALUES (?,?,?,?,?,?,?,?,?,?,?)';
@@ -83,6 +86,7 @@ export class YGOProCdb {
       this.database.exec(DROP_TEXTS_TABLE_STMT);
     } else {
       this.database.exec(CREATE_TEXTS_TABLE_STMT);
+      this.database.exec(INSERT_EMPTY_TEXTS_FROM_DATAS_STMT);
     }
     return this;
   }
@@ -161,40 +165,61 @@ export class YGOProCdb {
   find(filter: CdbFindFilter): CardDataEntry[];
   find(): CardDataEntry[];
   find(...args) {
-    let stmt = '';
-    let params: Record<string, any> = {};
+    return Array.from(
+      (this.step as (...stepArgs: any[]) => Iterable<CardDataEntry>)(...args),
+    );
+  }
 
-    if (args.length === 0) {
-      stmt = '';
-    } else if (typeof args[0] === 'string') {
-      stmt = args[0];
-      params = args[1] ?? {};
-      if (this._noTexts && /\btexts\./i.test(stmt)) {
-        throw new Error('texts table is not available in noTexts mode');
-      }
-    } else {
-      const filter = args[0] as CdbFindFilter;
-      const built = buildCdbFilterStmt(filter, { noTexts: this._noTexts });
-      stmt = built.stmt;
-      params = built.params;
-    }
-
+  step<S extends string>(
+    stmt: S,
+    params: CdbSqljsParamsFromStmt<S>,
+  ): Generator<CardDataEntry, void, unknown>;
+  step<S extends string>(
+    stmt: S,
+  ): CdbSqljsParamKeys<S> extends never
+    ? Generator<CardDataEntry, void, unknown>
+    : never;
+  step(filter: CdbFindFilter): Generator<CardDataEntry, void, unknown>;
+  step(): Generator<CardDataEntry, void, unknown>;
+  *step(...args) {
+    const { stmt, params } = this.resolveQueryArgs(args);
     const where = stmt ? ` WHERE ${stmt}` : '';
     const sql = `${
       this._noTexts ? SELECT_STMT_NO_TEXTS : SELECT_STMT_WITH_TEXTS
     }${where}`;
     const query = this.database.prepare(sql);
-    const results: CardDataEntry[] = [];
     try {
       query.bind(normalizeCdbParams(params));
       while (query.step()) {
         const row = query.getAsObject() as unknown as CdbSqljsRow;
-        results.push(new CardDataEntry().fromSqljsRow(row));
+        yield new CardDataEntry().fromSqljsRow(row);
       }
     } finally {
       query.free();
     }
-    return results;
+  }
+
+  private resolveQueryArgs(args: any[]) {
+    let stmt = '';
+    let params: Record<string, any> = {};
+    if (args.length === 0) {
+      return { stmt, params };
+    }
+    if (typeof args[0] === 'string') {
+      stmt = args[0];
+      params = args[1] ?? {};
+      if (this._noTexts && /\btexts\./i.test(stmt)) {
+        throw new Error('texts table is not available in noTexts mode');
+      }
+      return { stmt, params };
+    }
+
+    const filter = args[0] as CdbFindFilter;
+    const built = buildCdbFilterStmt(filter, { noTexts: this._noTexts });
+    return {
+      stmt: built.stmt,
+      params: built.params,
+    };
   }
 
   findOne<S extends string>(

@@ -11,3 +11,6 @@ Dockerfile
 /tests
 /dist/tests
 /build.js
+
+.DS_Store
+._*
