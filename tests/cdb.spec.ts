@@ -422,6 +422,93 @@ describe('YGOProCdb rule_code handling', () => {
     expect(foundAlt?.ruleCode).toBe(0);
     expect(foundAlt?.name).toBe('异画版');
   });
+
+  test('chained alternative artwork inherits ruleCode correctly', async () => {
+    const SQL = await initSqlJs();
+    const rawDb = new SQL.Database();
+    
+    rawDb.exec(
+      'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
+      'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);'
+    );
+    
+    rawDb.exec(`
+      INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
+        (10000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20000, 1, 10000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20001, 1, 20000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0);
+      
+      INSERT INTO texts (id, name, desc) VALUES
+        (10000, '原始卡', ''),
+        (20000, '第一异画', ''),
+        (20001, '第二异画', '');
+    `);
+
+    const db = new YGOProCdb(rawDb);
+
+    const foundOriginal = db.findById(10000);
+    expect(foundOriginal).toBeDefined();
+    expect(foundOriginal?.code).toBe(10000);
+    expect(foundOriginal?.alias).toBe(0);
+    expect(foundOriginal?.ruleCode).toBe(0);
+
+    const foundFirst = db.findById(20000);
+    expect(foundFirst).toBeDefined();
+    expect(foundFirst?.code).toBe(20000);
+    expect(foundFirst?.alias).toBe(0);
+    expect(foundFirst?.ruleCode).toBe(10000);
+
+    const foundSecond = db.findById(20001);
+    expect(foundSecond).toBeDefined();
+    expect(foundSecond?.code).toBe(20001);
+    expect(foundSecond?.alias).toBe(20000);
+    expect(foundSecond?.ruleCode).toBe(10000);
+  });
+
+  test('round trip: chained alternative artwork preserves alias and ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const rawDb = new SQL.Database();
+    
+    rawDb.exec(
+      'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
+      'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);'
+    );
+    
+    rawDb.exec(`
+      INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
+        (10000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20000, 1, 10000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20001, 1, 20000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0);
+      
+      INSERT INTO texts (id, name, desc) VALUES
+        (10000, '原始卡', ''),
+        (20000, '第一异画', ''),
+        (20001, '第二异画', '');
+    `);
+
+    const db = new YGOProCdb(rawDb);
+    const exported = db.export();
+
+    const db2 = new YGOProCdb(SQL).from(exported);
+
+    const foundOriginal = db2.findById(10000);
+    expect(foundOriginal).toBeDefined();
+    expect(foundOriginal?.code).toBe(10000);
+    expect(foundOriginal?.alias).toBe(0);
+    expect(foundOriginal?.ruleCode).toBe(0);
+
+    const foundFirst = db2.findById(20000);
+    expect(foundFirst).toBeDefined();
+    expect(foundFirst?.code).toBe(20000);
+    expect(foundFirst?.alias).toBe(0);
+    expect(foundFirst?.ruleCode).toBe(10000);
+
+    const foundSecond = db2.findById(20001);
+    expect(foundSecond).toBeDefined();
+    expect(foundSecond?.code).toBe(20001);
+    expect(foundSecond?.alias).toBe(20000);
+    expect(foundSecond?.ruleCode).toBe(10000);
+  });
 });
 
 describe('YGOProCdb addCard and export', () => {
