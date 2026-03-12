@@ -1,6 +1,6 @@
 {
   "name": "ygopro-cdb-encode",
-  "version": "1.1.0-0",
+  "version": "1.1.0-1",
   "description": "YGOPro CDB encoder/decoder and query helpers for Node.js/TypeScript.",
   "keywords": [],
   "homepage": "https://github.com/purerosefallen/ygopro-cdb-encode",
