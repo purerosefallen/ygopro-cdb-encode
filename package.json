@@ -1,10 +1,18 @@
 {
   "name": "ygopro-cdb-encode",
+  "version": "1.0.5",
   "description": "YGOPro CDB encoder/decoder and query helpers for Node.js/TypeScript.",
-  "version": "1.0.3",
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
+  "keywords": [],
+  "homepage": "https://github.com/purerosefallen/ygopro-cdb-encode",
+  "bugs": {
+    "url": "https://github.com/purerosefallen/ygopro-cdb-encode/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/purerosefallen/ygopro-cdb-encode.git"
+  },
+  "license": "MIT",
+  "author": "Nanahira <nanahira@momobako.com>",
   "exports": {
     ".": {
       "import": "./dist/index.mjs",
@@ -12,43 +20,41 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "lint": "eslint --fix .",
     "build": "node build.js",
     "build:cjs": "node build.js cjs",
     "build:esm": "node build.js esm",
     "build:types": "node build.js types",
     "clean": "node build.js clean",
-    "test": "jest --passWithNoTests",
-    "start": "node dist/index.cjs"
+    "lint": "eslint --fix .",
+    "start": "node dist/index.cjs",
+    "test": "jest --passWithNoTests"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/purerosefallen/ygopro-cdb-encode.git"
-  },
-  "author": "Nanahira <nanahira@momobako.com>",
-  "license": "MIT",
-  "keywords": [],
-  "bugs": {
-    "url": "https://github.com/purerosefallen/ygopro-cdb-encode/issues"
-  },
-  "homepage": "https://github.com/purerosefallen/ygopro-cdb-encode",
   "jest": {
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
     "moduleFileExtensions": [
       "js",
       "json",
       "ts"
     ],
     "rootDir": "tests",
+    "testEnvironment": "node",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    }
+  },
+  "dependencies": {
+    "@types/sql.js": "^1.4.9",
+    "nfkit": "^1.0.21",
+    "sql.js": "^1.13.0",
+    "ygopro-msg-encode": "^1.2.0-0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -64,11 +70,5 @@
     "prettier": "^3.8.1",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "@types/sql.js": "^1.4.9",
-    "nfkit": "^1.0.21",
-    "sql.js": "^1.13.0",
-    "ygopro-msg-encode": "^1.2.0-0"
   }
 }
