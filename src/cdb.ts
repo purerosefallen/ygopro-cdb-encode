@@ -226,7 +226,7 @@ export class YGOProCdb {
     };
   }
 
-  private resolveRuleCode(cards: CardDataEntry[]) {
+  resolveRuleCode(cards: CardDataEntry[]) {
     const needsResolve = cards.filter((c) => !c.ruleCode && c.alias);
     if (needsResolve.length === 0) return;
 
@@ -253,6 +253,7 @@ export class YGOProCdb {
         card.ruleCode = ruleCode;
       }
     }
+    return cards;
   }
 
   findOne<S extends string>(
