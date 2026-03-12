@@ -119,6 +119,8 @@ export class CardDataEntry extends CardData {
       (((this.rscale ?? 0) & 0xff) << 16) |
       (((this.lscale ?? 0) & 0xff) << 24);
 
+    const dbAlias = this.alias || this.ruleCode || 0;
+
     const strings = this.strings ?? [];
     const getString = (index: number) => {
       const value = strings[index];
@@ -129,7 +131,7 @@ export class CardDataEntry extends CardData {
       datas: {
         id: this.code ?? 0,
         ot: this.ot ?? 0,
-        alias: this.alias ?? 0,
+        alias: dbAlias,
         setcode: toSetcodeFromNumberArray(this.setcode ?? []),
         type,
         atk: attack,

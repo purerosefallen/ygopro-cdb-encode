@@ -367,6 +367,61 @@ describe('YGOProCdb rule_code handling', () => {
     expect(found?.alias).toBe(99998);
     expect(found?.ruleCode).toBe(0);
   });
+
+  test('round trip: card with ruleCode writes and reads back correctly', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+
+    const original = new CardDataEntry().fromPartial({
+      code: 100060,
+      alias: 100020,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '有别名的原卡',
+    });
+
+    db.addCard(original);
+    const exported = db.export();
+
+    const db2 = new YGOProCdb(SQL).from(exported);
+    const found = db2.findById(100060);
+
+    expect(found).toBeDefined();
+    expect(found?.code).toBe(100060);
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(100020);
+    expect(found?.name).toBe('有别名的原卡');
+  });
+
+  test('round trip: alternative artwork card preserves alias', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+
+    const original = new CardDataEntry().fromPartial({
+      code: 100070,
+      alias: 0,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '原版',
+    });
+
+    const alternative = new CardDataEntry().fromPartial({
+      code: 100075,
+      alias: 100070,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '异画版',
+    });
+
+    db.addCard([original, alternative]);
+    const exported = db.export();
+
+    const db2 = new YGOProCdb(SQL).from(exported);
+    const foundAlt = db2.findById(100075);
+
+    expect(foundAlt).toBeDefined();
+    expect(foundAlt?.code).toBe(100075);
+    expect(foundAlt?.alias).toBe(100070);
+    expect(foundAlt?.ruleCode).toBe(0);
+    expect(foundAlt?.name).toBe('异画版');
+  });
 });
 
 describe('YGOProCdb addCard and export', () => {
