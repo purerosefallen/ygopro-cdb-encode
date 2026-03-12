@@ -368,6 +368,43 @@ describe('YGOProCdb rule_code handling', () => {
     expect(found?.ruleCode).toBe(0);
   });
 
+  test('token cards do not inherit ruleCode even with alternative alias', async () => {
+    const SQL = await initSqlJs();
+    const rawDb = new SQL.Database();
+
+    rawDb.exec(
+      'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
+        'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);',
+    );
+
+    const typeToken =
+      OcgcoreCommonConstants.TYPE_TOKEN | OcgcoreCommonConstants.TYPE_MONSTER;
+
+    rawDb.exec(`
+      INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
+        (30000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (30010, 1, 30000, 0, ${typeToken}, 0, 0, 0, 0, 0, 0);
+      
+      INSERT INTO texts (id, name, desc) VALUES
+        (30000, '原卡', ''),
+        (30010, 'Token', '');
+    `);
+
+    const db = new YGOProCdb(rawDb);
+
+    const foundOriginal = db.findById(30000);
+    expect(foundOriginal).toBeDefined();
+    expect(foundOriginal?.code).toBe(30000);
+    expect(foundOriginal?.alias).toBe(0);
+    expect(foundOriginal?.ruleCode).toBe(0);
+
+    const foundToken = db.findById(30010);
+    expect(foundToken).toBeDefined();
+    expect(foundToken?.code).toBe(30010);
+    expect(foundToken?.alias).toBe(30000);
+    expect(foundToken?.ruleCode).toBe(0);
+  });
+
   test('round trip: card with ruleCode writes and reads back correctly', async () => {
     const SQL = await initSqlJs();
     const db = new YGOProCdb(SQL);
@@ -426,12 +463,12 @@ describe('YGOProCdb rule_code handling', () => {
   test('chained alternative artwork inherits ruleCode correctly', async () => {
     const SQL = await initSqlJs();
     const rawDb = new SQL.Database();
-    
+
     rawDb.exec(
       'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
-      'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);'
+        'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);',
     );
-    
+
     rawDb.exec(`
       INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
         (10000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
@@ -468,12 +505,12 @@ describe('YGOProCdb rule_code handling', () => {
   test('round trip: chained alternative artwork preserves alias and ruleCode', async () => {
     const SQL = await initSqlJs();
     const rawDb = new SQL.Database();
-    
+
     rawDb.exec(
       'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
-      'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);'
+        'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);',
     );
-    
+
     rawDb.exec(`
       INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
         (10000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),

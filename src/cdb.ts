@@ -9,6 +9,7 @@ import {
   CdbSqljsRow,
 } from './types';
 import { buildCdbFilterStmt, normalizeCdbParams } from './utility/cdb-filter';
+import { OcgcoreCommonConstants } from 'ygopro-msg-encode';
 
 const SELECT_STMT_WITH_TEXTS =
   'SELECT datas.id, datas.ot, datas.alias, datas.setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category,' +
@@ -227,21 +228,45 @@ export class YGOProCdb {
   }
 
   resolveRuleCode(cards: CardDataEntry[]) {
-    const needsResolve = cards.filter((c) => !c.ruleCode && c.alias);
+    const needsResolve = cards.filter(
+      (c) =>
+        !c.ruleCode && c.alias && !(c.type & OcgcoreCommonConstants.TYPE_TOKEN),
+    );
     if (needsResolve.length === 0) return;
 
     const aliasIds = needsResolve.map((c) => c.alias);
     const placeholders = aliasIds.map(() => '?').join(',');
-    const sql = `${SELECT_STMT_NO_TEXTS} WHERE datas.id IN (${placeholders})`;
+    const sql = `SELECT id, alias, type FROM datas WHERE id IN (${placeholders})`;
     const query = this.database.prepare(sql);
 
     const aliasToRuleCode = new Map<number, number>();
     try {
       query.bind(aliasIds);
       while (query.step()) {
-        const row = query.getAsObject() as unknown as CdbSqljsRow;
-        const tempCard = new CardDataEntry().fromSqljsRow(row);
-        aliasToRuleCode.set(tempCard.code, tempCard.ruleCode);
+        const row = query.getAsObject() as {
+          id: number;
+          alias: number;
+          type: number;
+        };
+        const code = row.id;
+        const alias = row.alias ?? 0;
+        const type = (row.type ?? 0) >>> 0;
+        let ruleCode = 0;
+
+        if (code === 5405695) {
+          ruleCode = alias;
+        } else if (alias && !(type & OcgcoreCommonConstants.TYPE_TOKEN)) {
+          const CARD_ARTWORK_VERSIONS_OFFSET = 20;
+          const isAlternative =
+            alias &&
+            alias < code + CARD_ARTWORK_VERSIONS_OFFSET &&
+            code < alias + CARD_ARTWORK_VERSIONS_OFFSET;
+          if (!isAlternative) {
+            ruleCode = alias;
+          }
+        }
+
+        aliasToRuleCode.set(code, ruleCode);
       }
     } finally {
       query.free();
