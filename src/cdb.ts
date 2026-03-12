@@ -48,10 +48,12 @@ export class YGOProCdb {
     }
   }
 
-  get database() { 
-    if (!this.db) { 
-      if (!this.SQL) { 
-        throw new Error('Database is not initialized and SqlJsStatic is not available');
+  get database() {
+    if (!this.db) {
+      if (!this.SQL) {
+        throw new Error(
+          'Database is not initialized and SqlJsStatic is not available',
+        );
       }
       this.db = new this.SQL.Database();
       this.db.exec(CREATE_TABLE_STMT);
@@ -194,7 +196,39 @@ export class YGOProCdb {
     } finally {
       query.free();
     }
+
+    this.resolveRuleCode(results);
+
     return results;
+  }
+
+  private resolveRuleCode(cards: CardDataEntry[]) {
+    const needsResolve = cards.filter((c) => !c.ruleCode && c.alias);
+    if (needsResolve.length === 0) return;
+
+    const aliasIds = needsResolve.map((c) => c.alias);
+    const placeholders = aliasIds.map(() => '?').join(',');
+    const sql = `${SELECT_STMT_NO_TEXTS} WHERE datas.id IN (${placeholders})`;
+    const query = this.database.prepare(sql);
+
+    const aliasToRuleCode = new Map<number, number>();
+    try {
+      query.bind(aliasIds);
+      while (query.step()) {
+        const row = query.getAsObject() as unknown as CdbSqljsRow;
+        const tempCard = new CardDataEntry().fromSqljsRow(row);
+        aliasToRuleCode.set(tempCard.code, tempCard.ruleCode);
+      }
+    } finally {
+      query.free();
+    }
+
+    for (const card of needsResolve) {
+      const ruleCode = aliasToRuleCode.get(card.alias);
+      if (ruleCode) {
+        card.ruleCode = ruleCode;
+      }
+    }
   }
 
   findOne<S extends string>(

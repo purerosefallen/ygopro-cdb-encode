@@ -192,9 +192,9 @@ describe('YGOProCdb find APIs', () => {
   test('noTexts mode rejects text predicates', () => {
     cdb.noTexts();
 
-    expect(() =>
-      cdb.find('texts.name = :name', { name: '黑魔术师' }),
-    ).toThrow(/noTexts mode/i);
+    expect(() => cdb.find('texts.name = :name', { name: '黑魔术师' })).toThrow(
+      /noTexts mode/i,
+    );
 
     expect(() => cdb.find({ name: '黑魔术师' })).toThrow(/noTexts mode/i);
     expect(() => cdb.findOne({ name: '黑魔术师' })).toThrow(/noTexts mode/i);
@@ -234,6 +234,102 @@ describe('YGOProCdb find APIs', () => {
     expect(exists.length).toBe(1);
 
     db.finalize();
+  });
+});
+
+describe('YGOProCdb rule_code handling', () => {
+  test('card with no alias has ruleCode = 0', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 100001,
+      alias: 0,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '普通卡',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(100001);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(0);
+  });
+
+  test('card with non-alternative alias moves alias to ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 100050,
+      alias: 100000,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '有别名的卡',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(100050);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(100000);
+  });
+
+  test('alternative artwork card keeps alias and inherits ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+
+    const original = new CardDataEntry().fromPartial({
+      code: 100010,
+      alias: 0,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '原画卡',
+    });
+
+    const alternative = new CardDataEntry().fromPartial({
+      code: 100015,
+      alias: 100010,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '异画卡',
+    });
+
+    db.addCard([original, alternative]);
+    const foundAlt = db.findById(100015);
+    expect(foundAlt).toBeDefined();
+    expect(foundAlt?.alias).toBe(100010);
+    expect(foundAlt?.ruleCode).toBe(0);
+  });
+
+  test('special card 5405695 moves alias to ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 5405695,
+      alias: 12345,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: 'Black Luster Soldier #2',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(5405695);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(12345);
+  });
+
+  test('token cards do not process alias', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 100003,
+      alias: 99998,
+      type:
+        OcgcoreCommonConstants.TYPE_TOKEN | OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '衍生物',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(100003);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(99998);
+    expect(found?.ruleCode).toBe(0);
   });
 });
 
