@@ -9,6 +9,7 @@ import {
   CdbSqljsRow,
 } from './types';
 import { buildCdbFilterStmt, normalizeCdbParams } from './utility/cdb-filter';
+import { OcgcoreCommonConstants } from 'ygopro-msg-encode';
 
 const SELECT_STMT_WITH_TEXTS =
   'SELECT datas.id, datas.ot, datas.alias, datas.setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category,' +
@@ -24,7 +25,7 @@ const CREATE_TEXTS_TABLE_STMT =
   'CREATE TABLE IF NOT EXISTS texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);';
 const DROP_TEXTS_TABLE_STMT = 'DROP TABLE IF EXISTS texts';
 const INSERT_EMPTY_TEXTS_FROM_DATAS_STMT =
-  "INSERT OR IGNORE INTO texts(id,name,desc,str1,str2,str3,str4,str5,str6,str7,str8,str9,str10,str11,str12,str13,str14,str15,str16) " +
+  'INSERT OR IGNORE INTO texts(id,name,desc,str1,str2,str3,str4,str5,str6,str7,str8,str9,str10,str11,str12,str13,str14,str15,str16) ' +
   "SELECT datas.id,'' AS name,'' AS desc,'' AS str1,'' AS str2,'' AS str3,'' AS str4,'' AS str5,'' AS str6,'' AS str7,'' AS str8,'' AS str9,'' AS str10,'' AS str11,'' AS str12,'' AS str13,'' AS str14,'' AS str15,'' AS str16 FROM datas";
 
 const INSERT_DATAS_STMT =
@@ -51,10 +52,12 @@ export class YGOProCdb {
     }
   }
 
-  get database() { 
-    if (!this.db) { 
-      if (!this.SQL) { 
-        throw new Error('Database is not initialized and SqlJsStatic is not available');
+  get database() {
+    if (!this.db) {
+      if (!this.SQL) {
+        throw new Error(
+          'Database is not initialized and SqlJsStatic is not available',
+        );
       }
       this.db = new this.SQL.Database();
       this.db.exec(CREATE_TABLE_STMT);
@@ -165,9 +168,11 @@ export class YGOProCdb {
   find(filter: CdbFindFilter): CardDataEntry[];
   find(): CardDataEntry[];
   find(...args) {
-    return Array.from(
+    const results = Array.from(
       (this.step as (...stepArgs: any[]) => Iterable<CardDataEntry>)(...args),
     );
+    this.resolveRuleCode(results);
+    return results;
   }
 
   step<S extends string>(
@@ -220,6 +225,60 @@ export class YGOProCdb {
       stmt: built.stmt,
       params: built.params,
     };
+  }
+
+  resolveRuleCode(cards: CardDataEntry[]) {
+    const needsResolve = cards.filter(
+      (c) =>
+        !c.ruleCode && c.alias && !(c.type & OcgcoreCommonConstants.TYPE_TOKEN),
+    );
+    if (needsResolve.length === 0) return;
+
+    const aliasIds = needsResolve.map((c) => c.alias);
+    const placeholders = aliasIds.map(() => '?').join(',');
+    const sql = `SELECT id, alias, type FROM datas WHERE id IN (${placeholders})`;
+    const query = this.database.prepare(sql);
+
+    const aliasToRuleCode = new Map<number, number>();
+    try {
+      query.bind(aliasIds);
+      while (query.step()) {
+        const row = query.getAsObject() as {
+          id: number;
+          alias: number;
+          type: number;
+        };
+        const code = row.id;
+        const alias = row.alias ?? 0;
+        const type = (row.type ?? 0) >>> 0;
+        let ruleCode = 0;
+
+        if (code === 5405695) {
+          ruleCode = alias;
+        } else if (alias && !(type & OcgcoreCommonConstants.TYPE_TOKEN)) {
+          const CARD_ARTWORK_VERSIONS_OFFSET = 20;
+          const isAlternative =
+            alias &&
+            alias < code + CARD_ARTWORK_VERSIONS_OFFSET &&
+            code < alias + CARD_ARTWORK_VERSIONS_OFFSET;
+          if (!isAlternative) {
+            ruleCode = alias;
+          }
+        }
+
+        aliasToRuleCode.set(code, ruleCode);
+      }
+    } finally {
+      query.free();
+    }
+
+    for (const card of needsResolve) {
+      const ruleCode = aliasToRuleCode.get(card.alias);
+      if (ruleCode) {
+        card.ruleCode = ruleCode;
+      }
+    }
+    return cards;
   }
 
   findOne<S extends string>(

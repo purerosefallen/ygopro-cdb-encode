@@ -50,10 +50,29 @@ export class CardDataEntry extends CardData {
     const lscale = ((levelRaw >>> 24) & 0xff) >>> 0;
     const rscale = ((levelRaw >>> 16) & 0xff) >>> 0;
 
+    const code = row.id;
+    let alias = row.alias ?? 0;
+    let ruleCode = 0;
+
+    if (code === 5405695) {
+      ruleCode = alias;
+      alias = 0;
+    } else if (alias && !(type & OcgcoreCommonConstants.TYPE_TOKEN)) {
+      const CARD_ARTWORK_VERSIONS_OFFSET = 20;
+      const isAlternative =
+        alias &&
+        alias < code + CARD_ARTWORK_VERSIONS_OFFSET &&
+        code < alias + CARD_ARTWORK_VERSIONS_OFFSET;
+      if (!isAlternative) {
+        ruleCode = alias;
+        alias = 0;
+      }
+    }
+
     Object.assign(this, {
-      code: row.id,
+      code,
       ot: row.ot ?? 0,
-      alias: row.alias ?? 0,
+      alias,
       setcode: toNumberArrayFromSetcode(row.setcode ?? 0),
       type,
       level,
@@ -64,6 +83,7 @@ export class CardDataEntry extends CardData {
       lscale,
       rscale,
       linkMarker,
+      ruleCode,
       category: row.category ?? 0,
       name: row.name ?? '',
       desc: row.desc ?? '',
@@ -99,6 +119,8 @@ export class CardDataEntry extends CardData {
       (((this.rscale ?? 0) & 0xff) << 16) |
       (((this.lscale ?? 0) & 0xff) << 24);
 
+    const dbAlias = this.alias || this.ruleCode || 0;
+
     const strings = this.strings ?? [];
     const getString = (index: number) => {
       const value = strings[index];
@@ -109,7 +131,7 @@ export class CardDataEntry extends CardData {
       datas: {
         id: this.code ?? 0,
         ot: this.ot ?? 0,
-        alias: this.alias ?? 0,
+        alias: dbAlias,
         setcode: toSetcodeFromNumberArray(this.setcode ?? []),
         type,
         atk: attack,

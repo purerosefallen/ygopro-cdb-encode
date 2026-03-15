@@ -116,14 +116,12 @@ type ExtractParams<S extends string> = S extends `${string}:${infer Rest}`
 
 export type CdbSqljsParamKeys<S extends string> = ExtractParams<S>;
 
-export type CdbSqljsParamsFromStmt<S extends string> = Exclude<
-  ExtractParams<S>,
-  keyof CdbSqljsRow
-> extends never
-  ? ExtractParams<S> extends never
-    ? {}
-    : { [K in ExtractParams<S> & keyof CdbSqljsRow]: CdbSqljsRow[K] }
-  : never;
+export type CdbSqljsParamsFromStmt<S extends string> =
+  Exclude<ExtractParams<S>, keyof CdbSqljsRow> extends never
+    ? ExtractParams<S> extends never
+      ? {}
+      : { [K in ExtractParams<S> & keyof CdbSqljsRow]: CdbSqljsRow[K] }
+    : never;
 
 export type CdbFindOperatorName =
   | 'Not'

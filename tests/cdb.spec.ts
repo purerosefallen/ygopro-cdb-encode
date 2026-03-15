@@ -202,9 +202,9 @@ describe('YGOProCdb find APIs', () => {
   test('noTexts mode rejects text predicates', () => {
     cdb.noTexts();
 
-    expect(() =>
-      cdb.find('texts.name = :name', { name: '黑魔术师' }),
-    ).toThrow(/noTexts mode/i);
+    expect(() => cdb.find('texts.name = :name', { name: '黑魔术师' })).toThrow(
+      /noTexts mode/i,
+    );
 
     expect(() => cdb.find({ name: '黑魔术师' })).toThrow(/noTexts mode/i);
     expect(() => cdb.findOne({ name: '黑魔术师' })).toThrow(/noTexts mode/i);
@@ -270,6 +270,281 @@ describe('YGOProCdb find APIs', () => {
     expect(found?.strings[0]).toBe('');
 
     db.finalize();
+  });
+});
+
+describe('YGOProCdb rule_code handling', () => {
+  test('card with no alias has ruleCode = 0', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 100001,
+      alias: 0,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '普通卡',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(100001);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(0);
+  });
+
+  test('card with non-alternative alias moves alias to ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 100050,
+      alias: 100000,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '有别名的卡',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(100050);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(100000);
+  });
+
+  test('alternative artwork card keeps alias and inherits ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+
+    const original = new CardDataEntry().fromPartial({
+      code: 100010,
+      alias: 0,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '原画卡',
+    });
+
+    const alternative = new CardDataEntry().fromPartial({
+      code: 100015,
+      alias: 100010,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '异画卡',
+    });
+
+    db.addCard([original, alternative]);
+    const foundAlt = db.findById(100015);
+    expect(foundAlt).toBeDefined();
+    expect(foundAlt?.alias).toBe(100010);
+    expect(foundAlt?.ruleCode).toBe(0);
+  });
+
+  test('special card 5405695 moves alias to ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 5405695,
+      alias: 12345,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: 'Black Luster Soldier #2',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(5405695);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(12345);
+  });
+
+  test('token cards do not process alias', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+    const entry = new CardDataEntry().fromPartial({
+      code: 100003,
+      alias: 99998,
+      type:
+        OcgcoreCommonConstants.TYPE_TOKEN | OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '衍生物',
+    });
+
+    db.addCard(entry);
+    const found = db.findById(100003);
+    expect(found).toBeDefined();
+    expect(found?.alias).toBe(99998);
+    expect(found?.ruleCode).toBe(0);
+  });
+
+  test('token cards do not inherit ruleCode even with alternative alias', async () => {
+    const SQL = await initSqlJs();
+    const rawDb = new SQL.Database();
+
+    rawDb.exec(
+      'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
+        'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);',
+    );
+
+    const typeToken =
+      OcgcoreCommonConstants.TYPE_TOKEN | OcgcoreCommonConstants.TYPE_MONSTER;
+
+    rawDb.exec(`
+      INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
+        (30000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (30010, 1, 30000, 0, ${typeToken}, 0, 0, 0, 0, 0, 0);
+      
+      INSERT INTO texts (id, name, desc) VALUES
+        (30000, '原卡', ''),
+        (30010, 'Token', '');
+    `);
+
+    const db = new YGOProCdb(rawDb);
+
+    const foundOriginal = db.findById(30000);
+    expect(foundOriginal).toBeDefined();
+    expect(foundOriginal?.code).toBe(30000);
+    expect(foundOriginal?.alias).toBe(0);
+    expect(foundOriginal?.ruleCode).toBe(0);
+
+    const foundToken = db.findById(30010);
+    expect(foundToken).toBeDefined();
+    expect(foundToken?.code).toBe(30010);
+    expect(foundToken?.alias).toBe(30000);
+    expect(foundToken?.ruleCode).toBe(0);
+  });
+
+  test('round trip: card with ruleCode writes and reads back correctly', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+
+    const original = new CardDataEntry().fromPartial({
+      code: 100060,
+      alias: 100020,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '有别名的原卡',
+    });
+
+    db.addCard(original);
+    const exported = db.export();
+
+    const db2 = new YGOProCdb(SQL).from(exported);
+    const found = db2.findById(100060);
+
+    expect(found).toBeDefined();
+    expect(found?.code).toBe(100060);
+    expect(found?.alias).toBe(0);
+    expect(found?.ruleCode).toBe(100020);
+    expect(found?.name).toBe('有别名的原卡');
+  });
+
+  test('round trip: alternative artwork card preserves alias', async () => {
+    const SQL = await initSqlJs();
+    const db = new YGOProCdb(SQL);
+
+    const original = new CardDataEntry().fromPartial({
+      code: 100070,
+      alias: 0,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '原版',
+    });
+
+    const alternative = new CardDataEntry().fromPartial({
+      code: 100075,
+      alias: 100070,
+      type: OcgcoreCommonConstants.TYPE_MONSTER,
+      name: '异画版',
+    });
+
+    db.addCard([original, alternative]);
+    const exported = db.export();
+
+    const db2 = new YGOProCdb(SQL).from(exported);
+    const foundAlt = db2.findById(100075);
+
+    expect(foundAlt).toBeDefined();
+    expect(foundAlt?.code).toBe(100075);
+    expect(foundAlt?.alias).toBe(100070);
+    expect(foundAlt?.ruleCode).toBe(0);
+    expect(foundAlt?.name).toBe('异画版');
+  });
+
+  test('chained alternative artwork inherits ruleCode correctly', async () => {
+    const SQL = await initSqlJs();
+    const rawDb = new SQL.Database();
+
+    rawDb.exec(
+      'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
+        'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);',
+    );
+
+    rawDb.exec(`
+      INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
+        (10000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20000, 1, 10000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20001, 1, 20000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0);
+      
+      INSERT INTO texts (id, name, desc) VALUES
+        (10000, '原始卡', ''),
+        (20000, '第一异画', ''),
+        (20001, '第二异画', '');
+    `);
+
+    const db = new YGOProCdb(rawDb);
+
+    const foundOriginal = db.findById(10000);
+    expect(foundOriginal).toBeDefined();
+    expect(foundOriginal?.code).toBe(10000);
+    expect(foundOriginal?.alias).toBe(0);
+    expect(foundOriginal?.ruleCode).toBe(0);
+
+    const foundFirst = db.findById(20000);
+    expect(foundFirst).toBeDefined();
+    expect(foundFirst?.code).toBe(20000);
+    expect(foundFirst?.alias).toBe(0);
+    expect(foundFirst?.ruleCode).toBe(10000);
+
+    const foundSecond = db.findById(20001);
+    expect(foundSecond).toBeDefined();
+    expect(foundSecond?.code).toBe(20001);
+    expect(foundSecond?.alias).toBe(20000);
+    expect(foundSecond?.ruleCode).toBe(10000);
+  });
+
+  test('round trip: chained alternative artwork preserves alias and ruleCode', async () => {
+    const SQL = await initSqlJs();
+    const rawDb = new SQL.Database();
+
+    rawDb.exec(
+      'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
+        'CREATE TABLE texts(id integer primary key,name text,desc text,str1 text,str2 text,str3 text,str4 text,str5 text,str6 text,str7 text,str8 text,str9 text,str10 text,str11 text,str12 text,str13 text,str14 text,str15 text,str16 text);',
+    );
+
+    rawDb.exec(`
+      INSERT INTO datas (id, ot, alias, setcode, type, atk, def, level, race, attribute, category) VALUES
+        (10000, 1, 0, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20000, 1, 10000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0),
+        (20001, 1, 20000, 0, ${OcgcoreCommonConstants.TYPE_MONSTER}, 0, 0, 0, 0, 0, 0);
+      
+      INSERT INTO texts (id, name, desc) VALUES
+        (10000, '原始卡', ''),
+        (20000, '第一异画', ''),
+        (20001, '第二异画', '');
+    `);
+
+    const db = new YGOProCdb(rawDb);
+    const exported = db.export();
+
+    const db2 = new YGOProCdb(SQL).from(exported);
+
+    const foundOriginal = db2.findById(10000);
+    expect(foundOriginal).toBeDefined();
+    expect(foundOriginal?.code).toBe(10000);
+    expect(foundOriginal?.alias).toBe(0);
+    expect(foundOriginal?.ruleCode).toBe(0);
+
+    const foundFirst = db2.findById(20000);
+    expect(foundFirst).toBeDefined();
+    expect(foundFirst?.code).toBe(20000);
+    expect(foundFirst?.alias).toBe(0);
+    expect(foundFirst?.ruleCode).toBe(10000);
+
+    const foundSecond = db2.findById(20001);
+    expect(foundSecond).toBeDefined();
+    expect(foundSecond?.code).toBe(20001);
+    expect(foundSecond?.alias).toBe(20000);
+    expect(foundSecond?.ruleCode).toBe(10000);
   });
 });
 
