@@ -3,6 +3,7 @@
 /data
 /output
 /config.yaml
+/ygopro-database
 .idea
 .dockerignore
 Dockerfile

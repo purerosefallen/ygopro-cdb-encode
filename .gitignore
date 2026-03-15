@@ -36,6 +36,7 @@ lerna-debug.log*
 /data
 /output
 /config.yaml
+/ygopro-database
 
 .DS_Store
 ._*
