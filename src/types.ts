@@ -2,7 +2,7 @@ export interface CdbSqljsRowData {
   id: number;
   ot: number;
   alias: number;
-  setcode: bigint;
+  setcode: number | bigint | string;
   type: number;
   atk: number;
   def: number;

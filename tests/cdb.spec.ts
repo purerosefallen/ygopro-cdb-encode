@@ -610,8 +610,7 @@ describe('YGOProCdb addCard and export', () => {
     const cdb = new YGOProCdb(SQL).from(rawData);
 
     const expectedArrayById: Record<number, number[]> = {
-      // 低 16bit 在 sql.js 的 number 表达下存在精度误差，这里以运行时解析结果为准
-      48486809: [4256, 0x41, 0x3008, 0x194], // 羽翼栗子球 LV6
+      48486809: [0x10a4, 0x41, 0x3008, 0x194], // 羽翼栗子球 LV6
       30095833: [0x99, 0x13b, 0x2073], // 霸王黑龙 异色眼叛逆超量龙
     };
 
@@ -632,13 +631,10 @@ describe('YGOProCdb addCard and export', () => {
       const card = cdb.findById(id) as CardDataEntry | undefined;
       expect(card).toBeDefined();
 
-      // 以当前解析出的 setcode 重新编码为 bigint，作为基准值
-      const row = card!.toSqljsRow();
-      const bigintValue = row.datas.setcode as bigint;
-      baselineHexById[id] = bigintValue
-        .toString(16)
-        .toUpperCase()
-        .padStart(16, '0');
+      const rawHex = rawDb.exec(
+        `SELECT printf('%016X', setcode) AS hex FROM datas WHERE id = ${id} LIMIT 1`,
+      );
+      baselineHexById[id] = String(rawHex[0].values[0][0]);
 
       newDb.addCard(card!);
     }

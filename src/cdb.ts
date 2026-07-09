@@ -10,13 +10,14 @@ import {
 } from './types';
 import { buildCdbFilterStmt, normalizeCdbParams } from './utility/cdb-filter';
 import { OcgcoreCommonConstants } from 'ygopro-msg-encode';
+import { toSqliteIntegerFromSetcode } from './utility/setcode-array';
 
 const SELECT_STMT_WITH_TEXTS =
-  'SELECT datas.id, datas.ot, datas.alias, datas.setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category,' +
+  'SELECT datas.id, datas.ot, datas.alias, CAST(datas.setcode AS TEXT) AS setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category,' +
   ' texts.name, texts.desc, texts.str1, texts.str2, texts.str3, texts.str4, texts.str5, texts.str6, texts.str7, texts.str8,' +
   ' texts.str9, texts.str10, texts.str11, texts.str12, texts.str13, texts.str14, texts.str15, texts.str16 FROM datas INNER JOIN texts ON datas.id = texts.id';
 const SELECT_STMT_NO_TEXTS =
-  'SELECT datas.id, datas.ot, datas.alias, datas.setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category FROM datas';
+  'SELECT datas.id, datas.ot, datas.alias, CAST(datas.setcode AS TEXT) AS setcode, datas.type, datas.atk, datas.def, datas.level, datas.race, datas.attribute, datas.category FROM datas';
 
 const CREATE_TABLE_STMT =
   'CREATE TABLE datas(id integer primary key,ot integer,alias integer,setcode integer,type integer,atk integer,def integer,level integer,race integer,attribute integer,category integer);' +
@@ -100,15 +101,6 @@ export class YGOProCdb {
     const stmtTexts = this._noTexts
       ? undefined
       : this.database.prepare(INSERT_TEXTS_STMT);
-    const toSqlValueSetcode = (value: number | bigint) => {
-      if (typeof value !== 'bigint') {
-        return value;
-      }
-      if (value <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return Number(value);
-      }
-      return value.toString();
-    };
     try {
       for (const c of cards) {
         const row = c.toSqljsRow();
@@ -118,7 +110,7 @@ export class YGOProCdb {
           datas.id,
           datas.ot,
           datas.alias,
-          toSqlValueSetcode(datas.setcode),
+          toSqliteIntegerFromSetcode(datas.setcode),
           datas.type,
           datas.atk,
           datas.def,
